@@ -20,6 +20,7 @@ type Site struct {
 	distanceFromMyQueen    int
 	distanceFromEnemyQueen int
 }
+
 type Sites map[int]*Site
 
 type Unit struct {
@@ -52,24 +53,36 @@ type Position struct {
 type BarracksCount map[int]int
 type UnitCount map[int]int
 
-const MaxKnightBarracks = 2
-const MaxArcherBarracks = 0
-const MaxTowers = 3
-const MaxKnights = 12
-const MaxArcher = 4
+// Configurable values
+const MaxKnightBarracks = 2 // How many Knight Barracks should we build?
+const MaxArcherBarracks = 0 // How many Archer Barracks should we build?
+const MaxTowers = 3         // How many Towers should we have at all times?
+const MaxKnights = 12       // How many Knights do we want to have at one time?
+const MaxArcher = 4         // How many Archers do we want to have at one time?
 
+// Buildings
+const Goldmine = 0
 const Tower = 1
 const Barracks = 2
+
+// Units
 const Queen = -1
-const Friendly = 0
-const Neutral = -1
-const Enemy = 1
 const Knight = 0
 const Archer = 1
 const Giant = 2
+
+// Owner
+const Friendly = 0
+const Neutral = -1
+const Enemy = 1
+
+// Field settings
 const FieldWidth = 1920
 const FieldHeight = 1000
 
+/************************************************
+MAIN FUNCTION
+*************************************************/
 func main() {
 	game := Game{
 		numberOfBarracks: &BarracksCount{
@@ -139,6 +152,9 @@ func main() {
 	}
 }
 
+/************************************************
+Game Methods
+*************************************************/
 func (game *Game) buildUnit(x int, y int, owner int, unitType int, health int) {
 	newUnit := Unit{
 		position: Position{
@@ -201,14 +217,14 @@ func (game *Game) getTrainAction() string {
 	// Decide train step
 	trainingLocations := ""
 	if game.gold > 80 && game.numberOfMyUnits[Knight] < MaxKnights {
-		closestAttackKnightsSiteID, _ := game.sites.findClosestSiteID(game.enemyQueen.position.x, game.enemyQueen.position.y, true, false, false, true, false, false)
+		closestAttackKnightsSiteID, _ := game.sites.findClosestSiteID(game.enemyQueen.position, true, false, false, true, false, false)
 		if closestAttackKnightsSiteID != -1 {
 			trainingLocations = trainingLocations + " " + strconv.Itoa(closestAttackKnightsSiteID)
 			game.gold = game.gold - 80
 		}
 	}
 	if game.gold > 100 && game.numberOfMyUnits[Archer] < MaxArcher {
-		closestArcherBarracksID, _ := game.sites.findClosestSiteID(game.myQueen.position.x, game.myQueen.position.y, true, false, false, false, false, true)
+		closestArcherBarracksID, _ := game.sites.findClosestSiteID(game.myQueen.position, true, false, false, false, false, true)
 		if closestArcherBarracksID != -1 {
 			trainingLocations = trainingLocations + " " + strconv.Itoa(closestArcherBarracksID)
 			game.gold = game.gold - 100
@@ -232,7 +248,7 @@ func (game *Game) GetQueenAction() string {
 		return "BUILD " + strconv.Itoa(game.touchedSite) + " " + buildType
 	} else {
 		// Decide move step
-		closestSiteID, distance := game.sites.findClosestSiteID(game.myQueen.position.x, game.myQueen.position.y, false, false, true, false, false, false)
+		closestSiteID, distance := game.sites.findClosestSiteID(game.myQueen.position, false, false, true, false, false, false)
 		fmt.Fprintln(os.Stderr, "closestSiteID", closestSiteID)
 		if distance > 500 {
 			closestSiteID = -1
@@ -248,6 +264,7 @@ func (game *Game) GetQueenAction() string {
 		return "MOVE " + strconv.Itoa(game.sites[closestSiteID].position.x) + " " + strconv.Itoa(game.sites[closestSiteID].position.y)
 	}
 }
+
 func (game *Game) findClosestEdge() Position {
 	x := 0
 	y := 0
@@ -262,6 +279,9 @@ func (game *Game) findClosestEdge() Position {
 	}
 }
 
+/************************************************
+Sites Methods
+*************************************************/
 func (sites Sites) findSiteIDs(owned bool, enemy bool, neutral bool) []int {
 	IDs := []int{}
 	for id, site := range sites {
@@ -276,14 +296,14 @@ func (sites Sites) findSiteIDs(owned bool, enemy bool, neutral bool) []int {
 
 func (sites Sites) setDistancesFromQueens(myQueen Unit, enemyQueen Unit) {
 	for _, site := range sites {
-		distanceFromMyQueen := distanceBetween(myQueen.position.x, myQueen.position.y, site.position.x, site.position.y)
+		distanceFromMyQueen := distanceBetween(myQueen.position, site.position)
 		site.distanceFromMyQueen = int(distanceFromMyQueen)
-		distanceFromEnemyQueen := distanceBetween(enemyQueen.position.x, enemyQueen.position.y, site.position.x, site.position.y)
+		distanceFromEnemyQueen := distanceBetween(enemyQueen.position, site.position)
 		site.distanceFromEnemyQueen = int(distanceFromEnemyQueen)
 	}
 }
 
-func (sites Sites) findClosestSiteID(x int, y int, owned bool, enemy bool, neutral bool, knightBarracks bool, tower bool, archerBarracks bool) (int, float64) {
+func (sites Sites) findClosestSiteID(position Position, owned bool, enemy bool, neutral bool, knightBarracks bool, tower bool, archerBarracks bool) (int, float64) {
 	//fmt.Fprintln(os.Stderr, "Checking for location x", x, " and Y:", y)
 	closestSiteID := -1
 	closestDistance := 9999999.0
@@ -307,7 +327,7 @@ func (sites Sites) findClosestSiteID(x int, y int, owned bool, enemy bool, neutr
 			continue
 		}
 
-		distance := distanceBetween(x, y, site.position.x, site.position.y)
+		distance := distanceBetween(position, site.position)
 		if distance < closestDistance {
 			closestSiteID = id
 			closestDistance = distance
@@ -317,6 +337,6 @@ func (sites Sites) findClosestSiteID(x int, y int, owned bool, enemy bool, neutr
 	return closestSiteID, closestDistance
 }
 
-func distanceBetween(x int, y int, targetX int, targetY int) float64 {
-	return math.Sqrt(math.Pow(float64(x-targetX), 2) + math.Pow(float64(y-targetY), 2))
+func distanceBetween(fromPosition Position, targetPosition Position) float64 {
+	return math.Sqrt(math.Pow(float64(fromPosition.x-targetPosition.x), 2) + math.Pow(float64(fromPosition.y-targetPosition.y), 2))
 }
