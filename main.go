@@ -55,7 +55,7 @@ type UnitCount map[int]int
 const MaxKnightBarracks = 2
 const MaxArcherBarracks = 0
 const MaxTowers = 3
-const MaxKnights = 8
+const MaxKnights = 12
 const MaxArcher = 4
 
 const Tower = 1
@@ -67,6 +67,8 @@ const Enemy = 1
 const Knight = 0
 const Archer = 1
 const Giant = 2
+const FieldWidth = 1920
+const FieldHeight = 1000
 
 func main() {
 	game := Game{
@@ -231,16 +233,32 @@ func (game *Game) GetQueenAction() string {
 	} else {
 		// Decide move step
 		closestSiteID, distance := game.sites.findClosestSiteID(game.myQueen.position.x, game.myQueen.position.y, false, false, true, false, false, false)
+		fmt.Fprintln(os.Stderr, "closestSiteID", closestSiteID)
 		if distance > 500 {
 			closestSiteID = -1
 		}
 		fmt.Fprintln(os.Stderr, "Number of game towers", game.numberOfTowers)
 		if closestSiteID == -1 || game.numberOfTowers >= MaxTowers {
-			closestSiteID, _ = game.sites.findClosestSiteID(game.myQueen.position.x, game.myQueen.position.y, true, false, false, false, true, false)
-			fmt.Fprintln(os.Stderr, "Moving to closest friendly tower!", closestSiteID)
+			edgePosition := game.findClosestEdge()
+			return "MOVE " + strconv.Itoa(edgePosition.x) + " " + strconv.Itoa(edgePosition.y)
+			//closestSiteID, _ = game.sites.findClosestSiteID(game.myQueen.position.x, game.myQueen.position.y, true, false, false, false, true, false)
+			//fmt.Fprintln(os.Stderr, "Moving to closest friendly tower!", closestSiteID)
 		}
 		fmt.Fprintln(os.Stderr, "closestSiteID ", closestSiteID, "xy", game.sites[closestSiteID].position.x, game.sites[closestSiteID].position.y)
 		return "MOVE " + strconv.Itoa(game.sites[closestSiteID].position.x) + " " + strconv.Itoa(game.sites[closestSiteID].position.y)
+	}
+}
+func (game *Game) findClosestEdge() Position {
+	x := 0
+	y := 0
+	if game.myQueenStartingPosition.x > (FieldWidth / 2) {
+		x = FieldWidth
+		y = FieldHeight
+	}
+
+	return Position{
+		x: x,
+		y: y,
 	}
 }
 
