@@ -53,30 +53,54 @@ type Position struct {
 type BarracksCount map[int]int
 type UnitCount map[int]int
 
-// Configurable values
-const MaxKnightBarracks = 2 // How many Knight Barracks should we build?
-const MaxArcherBarracks = 0 // How many Archer Barracks should we build?
-const MaxTowers = 3         // How many Towers should we have at all times?
-const MaxKnights = 12       // How many Knights do we want to have at one time?
-const MaxArcher = 4         // How many Archers do we want to have at one time?
+/************************************************
+Configurable values
+*************************************************/
 
-// Buildings
+// MaxKnightBarracks How many Knight Barracks do we build?
+const MaxKnightBarracks = 2
+
+// MaxArcherBarracks How many Archer Barracks should we build?
+const MaxArcherBarracks = 0
+
+// MaxTowers How many Towers should we have at all times?
+const MaxTowers = 3
+
+// MaxKnights How many Knights do we want to have at one time?
+const MaxKnights = 12
+
+// MaxArcher How many Archers do we want to have at one time?
+const MaxArcher = 4
+
+/************************************************
+Building Constants
+*************************************************/
+
 const Goldmine = 0
 const Tower = 1
 const Barracks = 2
 
-// Units
+/************************************************
+Unit Constants
+*************************************************/
+
 const Queen = -1
 const Knight = 0
 const Archer = 1
 const Giant = 2
 
-// Owner
+/************************************************
+Owner Constants
+*************************************************/
+
 const Friendly = 0
 const Neutral = -1
 const Enemy = 1
 
-// Field settings
+/************************************************
+Field Settings
+*************************************************/
+
 const FieldWidth = 1920
 const FieldHeight = 1000
 
@@ -116,8 +140,6 @@ func main() {
 		fmt.Scan(&game.gold, &game.touchedSite)
 
 		for i := 0; i < numSites; i++ {
-			// structureType: -1 = No structure, 2 = Barracks
-			// owner: -1 = No structure, 0 = Friendly, 1 = Enemy
 			var siteID, ignore1, ignore2, structureType, owner, param1, param2 int
 			fmt.Scan(&siteID, &ignore1, &ignore2, &structureType, &owner, &param1, &param2)
 			game.changeSite(siteID, structureType, owner, param1, param2)
@@ -132,7 +154,6 @@ func main() {
 		}
 		fmt.Scan(&numUnits)
 		for i := 0; i < numUnits; i++ {
-			// unitType: -1 = QUEEN, 0 = KNIGHT, 1 = ARCHER
 			var x, y, owner, unitType, health int
 			fmt.Scan(&x, &y, &owner, &unitType, &health)
 			game.buildUnit(x, y, owner, unitType, health)
@@ -146,7 +167,7 @@ func main() {
 		game.sites.setDistancesFromQueens(game.myQueen, game.enemyQueen)
 
 		fmt.Fprintln(os.Stderr, "I have ", game.numberOfMyUnits[Knight], "Knights")
-		fmt.Println(game.GetQueenAction())
+		fmt.Println(game.getQueenAction())
 		fmt.Println(game.getTrainAction())
 		game.turn++
 	}
@@ -234,7 +255,7 @@ func (game *Game) getTrainAction() string {
 	return "TRAIN" + trainingLocations
 }
 
-func (game *Game) GetQueenAction() string {
+func (game *Game) getQueenAction() string {
 	// Decide build step
 	if game.touchedSite != Neutral && game.sites[game.touchedSite].owner == Neutral {
 		fmt.Fprintln(os.Stderr, "knights and archer barracks", (*game.numberOfBarracks)[Knight], (*game.numberOfBarracks)[Archer])
