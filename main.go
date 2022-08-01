@@ -323,6 +323,9 @@ func (game *Game) getQueenAction() string {
 		for order, siteAndDistance := range game.sitesOrderedByDistanceFromStart {
 			if siteAndDistance.ID == game.touchedSite {
 				buildOrder := game.getBuildOrder()
+				if buildOrder[order] == Goldmine && game.sites[game.touchedSite].goldRemaining < 10 {
+					return game.getBuildCommand(game.touchedSite, buildOrder[len(buildOrder)-1])
+				}
 				return game.getBuildCommand(game.touchedSite, buildOrder[order])
 			}
 		}
@@ -335,27 +338,34 @@ func (game *Game) getQueenAction() string {
 		//	buildType = "TOWER"
 		//}
 		//return "BUILD " + strconv.Itoa(game.touchedSite) + " " + buildType
-	} else {
-		buildOrder := game.getBuildOrder()
-		for order, structureType := range buildOrder {
-			targetSite := game.sites[game.sitesOrderedByDistanceFromStart[order].ID]
-			if targetSite.owner != Friendly && targetSite.structureType != structureType {
-				return game.getMoveOrderForSite(targetSite)
-			}
-		}
-		// Decide move step
-		//closestSiteID, distance := game.sites.findClosestSiteID(game.myQueen.position, false, false, true, false, false, false)
-		//fmt.Fprintln(os.Stderr, "closestSiteID", closestSiteID)
-		//if distance > 500 {
-		//	closestSiteID = -1
-		//}
-		//fmt.Fprintln(os.Stderr, "Number of game towers", game.numberOfTowers)
-		//if game.numberOfTowers >= MaxTowers {
-		//}
-		//fmt.Fprintln(os.Stderr, "closestSiteID ", closestSiteID, "xy", game.sites[closestSiteID].position.x, game.sites[closestSiteID].position.y)
-		//return game.getMoveOrderForSite(game.sites[closestSiteID])
-		//return "MOVE " + strconv.Itoa(game.sites[closestSiteID].position.x) + " " + strconv.Itoa(game.sites[closestSiteID].position.y)
 	}
+	if game.touchedSite != Neutral &&
+		game.sites[game.touchedSite].owner == Friendly &&
+		game.sites[game.touchedSite].maxMineSize != game.sites[game.touchedSite].param1 &&
+		game.sites[game.touchedSite].structureType == Goldmine &&
+		game.sites[game.touchedSite].goldRemaining > 10 {
+		return game.getBuildCommand(game.touchedSite, Goldmine)
+	}
+	buildOrder := game.getBuildOrder()
+	for order, structureType := range buildOrder {
+		targetSite := game.sites[game.sitesOrderedByDistanceFromStart[order].ID]
+		if targetSite.owner != Friendly && targetSite.structureType != structureType {
+			return game.getMoveOrderForSite(targetSite)
+		}
+	}
+	// Decide move step
+	//closestSiteID, distance := game.sites.findClosestSiteID(game.myQueen.position, false, false, true, false, false, false)
+	//fmt.Fprintln(os.Stderr, "closestSiteID", closestSiteID)
+	//if distance > 500 {
+	//	closestSiteID = -1
+	//}
+	//fmt.Fprintln(os.Stderr, "Number of game towers", game.numberOfTowers)
+	//if game.numberOfTowers >= MaxTowers {
+	//}
+	//fmt.Fprintln(os.Stderr, "closestSiteID ", closestSiteID, "xy", game.sites[closestSiteID].position.x, game.sites[closestSiteID].position.y)
+	//return game.getMoveOrderForSite(game.sites[closestSiteID])
+	//return "MOVE " + strconv.Itoa(game.sites[closestSiteID].position.x) + " " + strconv.Itoa(game.sites[closestSiteID].position.y)
+
 	return game.getMoveToEdge()
 }
 func (game *Game) getBuildOrder() []int {
