@@ -80,6 +80,12 @@ const MaxKnights = 12
 // MaxArcher How many Archers do we want to have at one time?
 const MaxArcher = 4
 
+// MinTowerRangeConstruction Until what range should we "grow" our towers?
+const MinTowerRangeConstruction = 500
+
+// IgnoreGoldmine Change this goldmine into a Tower, if gold remaining is less than this.
+const IgnoreGoldmine = 10
+
 // Layered sites constants
 
 /************************************************
@@ -317,60 +323,81 @@ func (game *Game) getBuildCommand(siteID int, structureType int) string {
 	return "BUILD " + strconv.Itoa(siteID) + " " + building
 }
 
+func (game *Game) areEnemyUnitsNear(position Position) bool {
+	for _, unit := range game.enemyUnits {
+		distance := distanceBetween(position, unit.position)
+		if distance < 150 {
+			return true
+		}
+	}
+	return false
+}
+
 func (game *Game) getQueenAction() string {
-	// Decide build step
+	areEnemiesNear := game.areEnemyUnitsNear(game.myQueen.position)
+	if areEnemiesNear && game.numberOfTowers == 0 {
+		// There are enemies close, and we have no defences!
+		closestSiteID, _ := game.sites.findClosestSiteID(game.myQueen.position, false, true, true, false, false, false, false)
+		if game.touchedSite == closestSiteID {
+			// Build the Tower! you're close enough
+			return game.getBuildCommand(game.touchedSite, Tower)
+		} else {
+			// Run towards the new tower location
+			return game.getMoveOrderForSite(game.sites[game.touchedSite])
+		}
+	}
+
+	// Run Forest Run!
+	if areEnemiesNear {
+		return game.getMoveToEdge()
+	}
+
+	// Follow build order when touching a site.
+	buildOrder := game.getBuildOrder()
 	if game.touchedSite != Neutral && game.sites[game.touchedSite].owner == Neutral {
 		for order, siteAndDistance := range game.sitesOrderedByDistanceFromStart {
 			if siteAndDistance.ID == game.touchedSite {
-				buildOrder := game.getBuildOrder()
-				if buildOrder[order] == Goldmine && game.sites[game.touchedSite].goldRemaining < 10 {
-					return game.getBuildCommand(game.touchedSite, buildOrder[len(buildOrder)-1])
+				if buildOrder[order] == Goldmine && (game.areEnemyUnitsNear(game.sites[game.touchedSite].position) || game.sites[game.touchedSite].goldRemaining < IgnoreGoldmine) {
+					// If the gold has run out or enemies are near, build a Tower instead
+					return game.getBuildCommand(game.touchedSite, Tower)
 				}
 				return game.getBuildCommand(game.touchedSite, buildOrder[order])
 			}
 		}
-		//fmt.Fprintln(os.Stderr, "knights and archer barracks", (*game.numberOfBarracks)[Knight], (*game.numberOfBarracks)[Archer])
-		//buildType := "BARRACKS-KNIGHT"
-		//if (*game.numberOfBarracks)[Knight] >= MaxKnightBarracks {
-		//	buildType = "BARRACKS-ARCHER"
-		//}
-		//if (*game.numberOfBarracks)[Knight] >= MaxKnightBarracks && (*game.numberOfBarracks)[Archer] >= MaxArcherBarracks {
-		//	buildType = "TOWER"
-		//}
-		//return "BUILD " + strconv.Itoa(game.touchedSite) + " " + buildType
 	}
+	// Upgrade mine logic
 	if game.touchedSite != Neutral &&
 		game.sites[game.touchedSite].owner == Friendly &&
 		game.sites[game.touchedSite].maxMineSize != game.sites[game.touchedSite].param1 &&
 		game.sites[game.touchedSite].structureType == Goldmine &&
-		game.sites[game.touchedSite].goldRemaining > 10 {
+		game.sites[game.touchedSite].goldRemaining > IgnoreGoldmine {
 		return game.getBuildCommand(game.touchedSite, Goldmine)
 	}
-	buildOrder := game.getBuildOrder()
+
+	// Upgrade Tower logic
+	if game.touchedSite != Neutral &&
+		game.sites[game.touchedSite].owner == Friendly &&
+		game.sites[game.touchedSite].structureType == Tower &&
+		game.sites[game.touchedSite].param2 < MinTowerRangeConstruction {
+		return game.getBuildCommand(game.touchedSite, Tower)
+	}
+
+	// Move to next build order location
 	for order, structureType := range buildOrder {
 		targetSite := game.sites[game.sitesOrderedByDistanceFromStart[order].ID]
 		if targetSite.owner != Friendly && targetSite.structureType != structureType {
 			return game.getMoveOrderForSite(targetSite)
 		}
 	}
-	// Decide move step
-	//closestSiteID, distance := game.sites.findClosestSiteID(game.myQueen.position, false, false, true, false, false, false)
-	//fmt.Fprintln(os.Stderr, "closestSiteID", closestSiteID)
-	//if distance > 500 {
-	//	closestSiteID = -1
-	//}
-	//fmt.Fprintln(os.Stderr, "Number of game towers", game.numberOfTowers)
-	//if game.numberOfTowers >= MaxTowers {
-	//}
-	//fmt.Fprintln(os.Stderr, "closestSiteID ", closestSiteID, "xy", game.sites[closestSiteID].position.x, game.sites[closestSiteID].position.y)
-	//return game.getMoveOrderForSite(game.sites[closestSiteID])
-	//return "MOVE " + strconv.Itoa(game.sites[closestSiteID].position.x) + " " + strconv.Itoa(game.sites[closestSiteID].position.y)
 
+	// Everything's done! Move to safety (aka your corner of the map)
 	return game.getMoveToEdge()
 }
+
 func (game *Game) getBuildOrder() []int {
-	return []int{Goldmine, Goldmine, Goldmine, Barracks, Tower, Tower, Tower}
+	return []int{Goldmine, Barracks, Goldmine, Goldmine, Goldmine, Tower, Tower, Goldmine, Tower, Goldmine, Tower}
 }
+
 func (game *Game) getMoveOrderForSite(site *Site) string {
 	return "MOVE " + strconv.Itoa(site.position.x) + " " + strconv.Itoa(site.position.y)
 }
