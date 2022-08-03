@@ -46,8 +46,11 @@ type Game struct {
 	enemyUnits                      []Unit
 	sites                           Sites
 	turn                            int
+	startingHealth                  int
 	myQueenStartingPosition         Position
 	sitesOrderedByDistanceFromStart SitesByDistanceFromStart
+	enemyTowers                     Sites
+	unitBuildQueue                  []int
 }
 
 type Position struct {
@@ -138,6 +141,7 @@ func main() {
 		enemyQueen:      Unit{},
 		myUnits:         []Unit{},
 		enemyUnits:      []Unit{},
+		enemyTowers:     Sites{},
 		sites:           nil,
 		turn:            1,
 	}
@@ -181,6 +185,7 @@ func main() {
 				x: game.myQueen.position.x,
 				y: game.myQueen.position.y,
 			}
+			game.startingHealth = game.myQueen.health
 			game.setSitesOrderedByDistanceFromStart()
 		}
 		game.sites.setDistancesFromQueens(game.myQueen, game.enemyQueen)
@@ -260,27 +265,39 @@ func (game *Game) buildUnit(x int, y int, owner int, unitType int, health int) {
 func (game *Game) changeSite(ID int, structureType int, owner int, param1 int, param2 int, goldRemaining int, maxMineSize int) {
 	// Substract changing sites from count
 	// if game changed owner and the site was owner
-	if game.sites[ID].owner != owner && game.sites[ID].owner == Friendly {
-		if game.sites[ID].structureType == Tower {
-			game.numberOfTowers--
-			fmt.Fprintln(os.Stderr, "Substract game towers, total", game.numberOfTowers)
-		}
-		if game.sites[ID].structureType == Barracks {
-			(*game.numberOfBarracks)[param2]--
-			fmt.Fprintln(os.Stderr, "Substract number to ", param2, " To get total of ", strconv.Itoa((*game.numberOfBarracks)[param2]))
+	if game.sites[ID].owner != owner {
+		if game.sites[ID].owner == Friendly {
+			if game.sites[ID].structureType == Tower {
+				game.numberOfTowers--
+				fmt.Fprintln(os.Stderr, "Substract game towers, total", game.numberOfTowers)
+			}
+			if game.sites[ID].structureType == Barracks {
+				(*game.numberOfBarracks)[param2]--
+				fmt.Fprintln(os.Stderr, "Substract number to ", param2, " To get total of ", strconv.Itoa((*game.numberOfBarracks)[param2]))
+			}
+		} else {
+			if structureType == Tower {
+				game.enemyTowers[ID] = game.sites[ID]
+			}
 		}
 	}
 
 	//fmt.Fprintln(os.Stderr, "changin site ", ID, structureType, param2)
 	// Add towers
-	if structureType != game.sites[ID].structureType && owner == Friendly {
-		if structureType == Tower {
-			game.numberOfTowers++
-			fmt.Fprintln(os.Stderr, "Add Game towers, total", game.numberOfTowers)
-		}
-		if structureType == Barracks {
-			(*game.numberOfBarracks)[param2]++
-			fmt.Fprintln(os.Stderr, "Add number to ", param2, " To get total of ", strconv.Itoa((*game.numberOfBarracks)[param2]))
+	if structureType != game.sites[ID].structureType {
+		if owner == Friendly {
+			if structureType == Tower {
+				game.numberOfTowers++
+				fmt.Fprintln(os.Stderr, "Add Game towers, total", game.numberOfTowers)
+			}
+			if structureType == Barracks {
+				(*game.numberOfBarracks)[param2]++
+				fmt.Fprintln(os.Stderr, "Add number to ", param2, " To get total of ", strconv.Itoa((*game.numberOfBarracks)[param2]))
+			}
+		} else {
+			if structureType == Tower {
+				delete(game.enemyTowers, ID)
+			}
 		}
 	}
 	game.sites[ID].structureType = structureType
@@ -301,13 +318,13 @@ func (game *Game) getTrainAction() string {
 			game.gold = game.gold - 80
 		}
 	}
-	if game.gold > 100 && game.numberOfMyUnits[Archer] < MaxArcher {
-		closestArcherBarracksID, _ := game.sites.findClosestSiteID(game.myQueen.position, true, false, false, false, false, true, false)
-		if closestArcherBarracksID != -1 {
-			trainingLocations = trainingLocations + " " + strconv.Itoa(closestArcherBarracksID)
-			game.gold = game.gold - 100
-		}
-	}
+	//if game.gold > 100 && game.numberOfMyUnits[Archer] < MaxArcher {
+	//	closestArcherBarracksID, _ := game.sites.findClosestSiteID(game.myQueen.position, true, false, false, false, false, true, false)
+	//	if closestArcherBarracksID != -1 {
+	//		trainingLocations = trainingLocations + " " + strconv.Itoa(closestArcherBarracksID)
+	//		game.gold = game.gold - 100
+	//	}
+	//}
 
 	return "TRAIN" + trainingLocations
 }
@@ -334,6 +351,7 @@ func (game *Game) areEnemyUnitsNear(position Position) bool {
 }
 
 func (game *Game) getQueenAction() string {
+	fmt.Fprintln(os.Stderr, "TouchsiteID", game.touchedSite)
 	areEnemiesNear := game.areEnemyUnitsNear(game.myQueen.position)
 	if areEnemiesNear && game.numberOfTowers == 0 {
 		// There are enemies close, and we have no defences!
@@ -341,23 +359,24 @@ func (game *Game) getQueenAction() string {
 		if game.touchedSite == closestSiteID {
 			// Build the Tower! you're close enough
 			return game.getBuildCommand(game.touchedSite, Tower)
-		} else {
-			// Run towards the new tower location
-			return game.getMoveOrderForSite(game.sites[game.touchedSite])
 		}
-	}
-
-	// Run Forest Run!
-	if areEnemiesNear {
-		return game.getMoveToEdge()
 	}
 
 	// Follow build order when touching a site.
 	buildOrder := game.getBuildOrder()
-	if game.touchedSite != Neutral && game.sites[game.touchedSite].owner == Neutral {
+
+	// If the Goldmine has been emptied out, replace with a Tower
+	for order, structureType := range buildOrder {
+		if structureType == Goldmine && game.sites[game.sitesOrderedByDistanceFromStart[order].ID].goldRemaining <= IgnoreGoldmine {
+			buildOrder[order] = Tower
+		}
+	}
+
+	//if game.touchedSite != Neutral && game.sites[game.touchedSite].owner == Neutral {
+	if game.touchedSite != Neutral {
 		for order, siteAndDistance := range game.sitesOrderedByDistanceFromStart {
-			if siteAndDistance.ID == game.touchedSite {
-				if buildOrder[order] == Goldmine && (game.areEnemyUnitsNear(game.sites[game.touchedSite].position) || game.sites[game.touchedSite].goldRemaining < IgnoreGoldmine) {
+			if siteAndDistance.ID == game.touchedSite && game.sites[game.sitesOrderedByDistanceFromStart[order].ID].structureType != buildOrder[order] {
+				if buildOrder[order] == Goldmine && (game.areEnemyUnitsNear(game.sites[game.touchedSite].position) || game.sites[game.touchedSite].goldRemaining <= IgnoreGoldmine) {
 					// If the gold has run out or enemies are near, build a Tower instead
 					return game.getBuildCommand(game.touchedSite, Tower)
 				}
@@ -365,6 +384,7 @@ func (game *Game) getQueenAction() string {
 			}
 		}
 	}
+
 	// Upgrade mine logic
 	if game.touchedSite != Neutral &&
 		game.sites[game.touchedSite].owner == Friendly &&
@@ -385,7 +405,8 @@ func (game *Game) getQueenAction() string {
 	// Move to next build order location
 	for order, structureType := range buildOrder {
 		targetSite := game.sites[game.sitesOrderedByDistanceFromStart[order].ID]
-		if targetSite.owner != Friendly && targetSite.structureType != structureType {
+		//if targetSite.owner != Friendly && targetSite.structureType != structureType {
+		if targetSite.structureType != structureType {
 			return game.getMoveOrderForSite(targetSite)
 		}
 	}
