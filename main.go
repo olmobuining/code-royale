@@ -101,8 +101,11 @@ const Goldmine = 0
 const Tower = 1
 const Barracks = 2
 
-// GiantBarracks (is actually 2, but 3 for simplicity?)
+// GiantBarracks (is actually 2 in-game)
 const GiantBarracks = 3
+
+// ArcherBarracks (is actually 2 in-game)
+const ArcherBarracks = 4
 
 /************************************************
 Unit Constants
@@ -112,6 +115,14 @@ const Queen = -1
 const Knight = 0
 const Archer = 1
 const Giant = 2
+
+/************************************************
+Unit Costs
+*************************************************/
+
+const KnightCost = 80
+const ArcherCost = 100
+const GiantCost = 140
 
 /************************************************
 Owner Constants
@@ -257,11 +268,11 @@ func (game *Game) determineStrategy() int {
 }
 
 func (game *Game) calculateRemainingGold() int {
-	substractGold := 0
+	subtract := 0
 	for _, unitType := range game.unitBuildQueue {
-		substractGold += game.getCostOfUnit(unitType)
+		subtract += game.getCostOfUnit(unitType)
 	}
-	return game.gold - substractGold
+	return game.gold - subtract
 }
 
 func (game *Game) setSitesOrderedByDistanceFromStart() {
@@ -300,7 +311,7 @@ func (game *Game) buildUnit(x int, y int, owner int, unitType int, health int) {
 
 func (game *Game) changeSite(ID int, structureType int, owner int, param1 int, param2 int, goldRemaining int, maxMineSize int) {
 	structureType = getRealStructureType(structureType, param2)
-	// Substract changing sites from count
+	// Subtract changing sites from count
 	// if game changed owner and the site was owner
 	if game.sites[ID].owner != owner {
 		if game.sites[ID].owner == Friendly {
@@ -360,16 +371,21 @@ func (game *Game) hasCountOfUnit(unitType int) int {
 }
 
 func (game *Game) getCostOfUnit(unitType int) int {
+	cost := 0
 	switch unitType {
 	case Knight:
-		return 80
+		cost = KnightCost
 	case Archer:
-		return 100
+		cost = ArcherCost
 	case Giant:
-		return 140
+		cost = GiantCost
 	}
 
-	return 0
+	if cost == 0 {
+		fmt.Fprintln(os.Stderr, "Undefined cost of unit type:", unitType)
+	}
+
+	return cost
 }
 
 func (game *Game) getTrainAction() string {
@@ -391,17 +407,19 @@ func (game *Game) getTrainAction() string {
 	// Decide train step
 	trainingLocations := ""
 	if len(game.unitBuildQueue) > 0 {
-		// To do: Implement unit type instead of just knights
 		var unitToTrain int
 		unitToTrain, game.unitBuildQueue = game.unitBuildQueue[0], game.unitBuildQueue[1:]
 		knightLocation := false
 		giantLocation := false
+		archerLocation := false
 		if unitToTrain == Knight {
 			knightLocation = true
 		} else if unitToTrain == Giant {
 			giantLocation = true
+		} else if unitToTrain == Archer {
+			archerLocation = true
 		}
-		closestAttackSiteID, _ := game.sites.findClosestSiteID(game.enemyQueen.position, true, false, false, knightLocation, false, false, false, giantLocation)
+		closestAttackSiteID, _ := game.sites.findClosestSiteID(game.enemyQueen.position, true, false, false, knightLocation, false, archerLocation, false, giantLocation)
 		if closestAttackSiteID != -1 {
 			trainingLocations = trainingLocations + " " + strconv.Itoa(closestAttackSiteID)
 		}
@@ -418,6 +436,8 @@ func (game *Game) getBuildCommand(siteID int, structureType int) string {
 		building = "BARRACKS-KNIGHT"
 	case GiantBarracks:
 		building = "BARRACKS-GIANT"
+	case ArcherBarracks:
+		building = "BARRACKS-ARCHER"
 	case Tower:
 		building = "TOWER"
 	}
@@ -580,10 +600,10 @@ func (sites Sites) findClosestSiteID(position Position, owned bool, enemy bool, 
 		if neutral == false && site.owner == Neutral {
 			continue
 		}
-		if knightBarracks == false && site.getStructureType() == Barracks && site.param2 == Knight {
+		if knightBarracks == false && site.getStructureType() == Barracks {
 			continue
 		}
-		if archerBarracks == false && site.getStructureType() == Barracks && site.param2 == Archer {
+		if archerBarracks == false && site.getStructureType() == ArcherBarracks {
 			continue
 		}
 		if giantBarracks == false && site.getStructureType() == GiantBarracks {
@@ -619,8 +639,10 @@ Helper functions
 *************************************************/
 
 func getRealStructureType(structureType int, param2 int) int {
-	if structureType == 2 && param2 == Giant {
-		structureType = 3
+	if structureType == Barracks && param2 == Giant {
+		structureType = GiantBarracks
+	} else if structureType == Barracks && param2 == Archer {
+		structureType = ArcherBarracks
 	}
 
 	return structureType
