@@ -86,7 +86,7 @@ const MaxKnights = 12
 const MaxArcher = 4
 
 // MinTowerRangeConstruction Until what range should we "grow" our towers?
-const MinTowerRangeConstruction = 500
+const MinTowerRangeConstruction = 400
 
 // IgnoreGoldmine Change this goldmine into a Tower, if gold remaining is less than this.
 const IgnoreGoldmine = 10
@@ -390,9 +390,9 @@ func (game *Game) getCostOfUnit(unitType int) int {
 
 func (game *Game) getTrainAction() string {
 	if game.strategy == DefaultStrategy {
-		if len(game.enemyTowers) >= 1 && game.remainingGold >= 160 && len(game.unitBuildQueue) == 0 {
+		if len(game.enemyTowers) > 1 && game.remainingGold >= 160 && len(game.unitBuildQueue) == 0 {
 			game.unitBuildQueue = append(game.unitBuildQueue, Knight, Knight)
-		} else if len(game.enemyTowers) == 0 && game.remainingGold >= 80 && len(game.unitBuildQueue) == 0 {
+		} else if len(game.enemyTowers) <= 1 && game.remainingGold >= 80 && len(game.unitBuildQueue) == 0 {
 			game.unitBuildQueue = append(game.unitBuildQueue, Knight)
 		}
 	}
@@ -408,7 +408,7 @@ func (game *Game) getTrainAction() string {
 	trainingLocations := ""
 	if len(game.unitBuildQueue) > 0 {
 		var unitToTrain int
-		unitToTrain, game.unitBuildQueue = game.unitBuildQueue[0], game.unitBuildQueue[1:]
+		unitToTrain = game.unitBuildQueue[0]
 		knightLocation := false
 		giantLocation := false
 		archerLocation := false
@@ -420,8 +420,10 @@ func (game *Game) getTrainAction() string {
 			archerLocation = true
 		}
 		closestAttackSiteID, _ := game.sites.findClosestSiteID(game.enemyQueen.position, true, false, false, knightLocation, false, archerLocation, false, giantLocation)
-		if closestAttackSiteID != -1 {
+		// Found a location and can train here.
+		if closestAttackSiteID != -1 && game.sites[closestAttackSiteID].param1 == 0 {
 			trainingLocations = trainingLocations + " " + strconv.Itoa(closestAttackSiteID)
+			game.unitBuildQueue = game.unitBuildQueue[1:]
 		}
 	}
 
@@ -467,13 +469,24 @@ func (game *Game) getQueenAction() string {
 		}
 	}
 
+	if game.myQueen.health < 10 {
+		return game.getMoveToEdge()
+	}
+
 	// Follow build order when touching a site.
 	buildOrder := game.getBuildOrder()
 
 	//if game.touchedSite != Neutral && game.sites[game.touchedSite].owner == Neutral {
 	if game.touchedSite != Neutral {
 		for order, siteAndDistance := range game.sitesOrderedByDistanceFromStart {
-			if siteAndDistance.ID == game.touchedSite && game.sites[game.sitesOrderedByDistanceFromStart[order].ID].getStructureType() != buildOrder[order] {
+			if order >= len(buildOrder) {
+				continue
+			}
+			//fmt.Fprintln(os.Stderr, "Order", order, game.sitesOrderedByDistanceFromStart[order].ID)
+			//fmt.Fprintln(os.Stderr, "buildorder", buildOrder[order])
+			//fmt.Fprintln(os.Stderr, "ID", game.sites[game.sitesOrderedByDistanceFromStart[order].ID].ID)
+			if siteAndDistance.ID == game.touchedSite &&
+				game.sites[game.sitesOrderedByDistanceFromStart[order].ID].getStructureType() != buildOrder[order] {
 				if buildOrder[order] == Goldmine && (game.areEnemyUnitsNear(game.sites[game.touchedSite].position) || game.sites[game.touchedSite].goldRemaining <= IgnoreGoldmine) {
 					// If the gold has run out or enemies are near, build a Tower instead
 					fmt.Fprintln(os.Stderr, "Replace goldmine with Tower")
@@ -505,11 +518,14 @@ func (game *Game) getQueenAction() string {
 	}
 
 	// Move to next build order location
-	for order, structureType := range buildOrder {
-		targetSite := game.sites[game.sitesOrderedByDistanceFromStart[order].ID]
+	for order := range buildOrder {
+		next := len(buildOrder) - 1 - order
+		targetSite := game.sites[game.sitesOrderedByDistanceFromStart[next].ID]
+
+		fmt.Fprintln(os.Stderr, "compare structure type", targetSite.ID, targetSite.getStructureType(), buildOrder[next])
 		//if targetSite.owner != Friendly && targetSite.structureType != structureType {
-		if targetSite.getStructureType() != structureType {
-			fmt.Fprintln(os.Stderr, "Move to next build order #", order)
+		if targetSite.getStructureType() != buildOrder[next] {
+			fmt.Fprintln(os.Stderr, "Move to next build order #", next)
 			return game.getMoveOrderForSite(targetSite)
 		}
 	}
@@ -520,7 +536,7 @@ func (game *Game) getQueenAction() string {
 }
 
 func (game *Game) getBuildOrder() []int {
-	buildOrder := []int{Goldmine, Goldmine, Goldmine, Barracks, Tower, Tower, Tower, Goldmine, Tower, Goldmine, Tower}
+	buildOrder := []int{Goldmine, Goldmine, Goldmine, Goldmine, Tower, Tower, Tower, Goldmine, Tower, Barracks}
 	// If the Goldmine has been emptied out, replace with a Tower
 	for order, structureType := range buildOrder {
 		if structureType == Goldmine && game.sites[game.sitesOrderedByDistanceFromStart[order].ID].goldRemaining <= IgnoreGoldmine {
